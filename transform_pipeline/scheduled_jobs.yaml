@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description:
+Resources:
+
+  TransformLambdaInvokePermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt TransformEvent.Arn
+      FunctionName: !GetAtt TransformLambda.Arn
+
+  TransformEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: TransformEvent
+      RoleArn: !GetAtt TransformLambdaRole.Arn
+      ScheduleExpression: rate(55 minutes)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt TransformLambda.Arn
+          Id: !Ref TransformLambda
+          Input: '{}'
+
+  TransformLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "TransformLambdaRole"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - events.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: EventPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                Resource: "*"
+        - PolicyName: LambdaPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+      Tags:
+        - Key: "CreatedBy"
+          Value: "Charles Firth"
+
+  TransformLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      #      Lambda layer including psycogp2 library
+      #      Layers:
+      #        -
+      Handler: index.lambda_handler
+      Role: !GetAtt TransformLambdaRole.Arn
+      Runtime: python3.8
+      Timeout: 120
+      FunctionName: TransformLambda
+      Code:
+        ZipFile: !Sub |
+          import psycopg2
+          def lambda_handler(event, context):
+              #DO_TRANSFORM
+              pass
+
+  TransformLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: TransformLambda
+    Properties:
+      LogGroupName: !Join [ "/", [ "/aws/lambda", !Ref TransformLambda ] ]
+      RetentionInDays: 14
